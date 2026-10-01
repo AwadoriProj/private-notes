@@ -1,0 +1,8 @@
+/mitm/ca/
+/mitm/config.json
+/game/config.json
+/game/login_rsa.pem
+/game/server.crt
+/game/server.key
+/game/db.json
+*.log
