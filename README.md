@@ -3,8 +3,23 @@
 ## Usage
 
 > Make sure you have Golang installed.
-> 
-> `python scripts/setup_db.py` — Create db
-> `python scripts/setup.py` — Generate CA + game TLS cert + both config.json files
-> `go run ./game game/config.json` — :9443, TLS
-> `go run ./mitm mitm/config.json` — :8443, MITM
+
+Create db:
+```bash
+python scripts/setup_db.py
+```
+
+Generate CA + game TLS cert + both config.json files:
+```bash
+python scripts/setup.py
+```
+
+Run game server (:9443, TLS):
+```bash
+go run ./game game/config.json
+```
+
+Run MITM proxy (:8443, MITM):
+```bash
+go run ./mitm mitm/config.json
+```
