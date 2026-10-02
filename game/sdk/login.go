@@ -64,7 +64,7 @@ func (s *Server) OTPVerifyLogin(w http.ResponseWriter, r *http.Request) {
 	code := r.Form.Get("email_code")
 	email := r.Form.Get("email")
 
-	if !s.Store.VerifyOTP(ticket, code, email) {
+	if !s.Store.VerifyOTP(ticket, code) {
 		writeErr(w, -2, "invalid otp code")
 		return
 	}
@@ -104,6 +104,10 @@ func (s *Server) OTPVerifyLogin(w http.ResponseWriter, r *http.Request) {
 		"is_new_user":   1,
 		"access_key":    session.AccessKey,
 	})
+}
+
+func (s *Server) OTPVerifyRegister(w http.ResponseWriter, r *http.Request) {
+	s.OTPVerifyLogin(w, r)
 }
 
 func (s *Server) CreateRole(w http.ResponseWriter, r *http.Request) {

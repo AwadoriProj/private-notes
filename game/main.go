@@ -71,6 +71,7 @@ func main() {
 	mux.HandleFunc("/gapi/client/rsa_public", login.RSAPublic)
 	mux.HandleFunc("/gapi/client/mail/otp/send", login.OTPSend)
 	mux.HandleFunc("/gapi/client/mail/otp/verify/login", login.OTPVerifyLogin)
+	mux.HandleFunc("/gapi/client/mail/otp/verify/register", login.OTPVerifyRegister)
 	mux.HandleFunc("/gapi/client/create.role", login.CreateRole)
 	mux.HandleFunc("/gapi/client/notify.zone", login.NotifyZone)
 	mux.HandleFunc("/gapi/client/server/list", stubs.ServerList)

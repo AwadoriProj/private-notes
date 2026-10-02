@@ -59,7 +59,7 @@ func (s *Store) CreateOTP(email string) (ticket string, ttl int) {
 	return ticket, 270
 }
 
-func (s *Store) VerifyOTP(ticket, code, email string) bool {
+func (s *Store) VerifyOTP(ticket, code string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	entry, ok := s.otps[ticket]
@@ -67,9 +67,6 @@ func (s *Store) VerifyOTP(ticket, code, email string) bool {
 		return false
 	}
 	if code != fixedOTP && code != entry.Code {
-		return false
-	}
-	if entry.Email != "" && email != "" && entry.Email != email {
 		return false
 	}
 	delete(s.otps, ticket)
