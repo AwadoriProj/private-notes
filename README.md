@@ -27,9 +27,9 @@ go run ./mitm mitm/config.json
 > make sure client device is proxied to ip:8443
 
 ## Progress
-[X] Login SDK
-[ ] Masterdata and on demand assets
-[ ] etc
+- [X] Login SDK
+- [ ] Masterdata and on demand assets
+- [ ] etc
 
 ## Note
 OTP is 000000
