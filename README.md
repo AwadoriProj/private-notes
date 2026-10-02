@@ -33,3 +33,7 @@ go run ./mitm mitm/config.json
 
 ## Note
 OTP is 000000
+### Requirements (for host)
+- PostgreSQL
+- Golang
+- Python
