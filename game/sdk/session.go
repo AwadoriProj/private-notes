@@ -39,7 +39,7 @@ func NewStore(database *db.Store) *Store {
 		sessions:   make(map[string]sessionEntry),
 		nextUID:    100000,
 		DB:         database,
-		sessionTTL: 72 * time.Hour,
+		sessionTTL: 30 * 24 * time.Hour,
 	}
 }
 

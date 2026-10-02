@@ -3,6 +3,7 @@ package sdk
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,7 +18,7 @@ type Envelope struct {
 }
 
 func writeOK(w http.ResponseWriter, data interface{}) {
-	writeEnvelope(w, 0, "ok", data)
+	writeEnvelope(w, 0, "success", data)
 }
 
 func writeErr(w http.ResponseWriter, code int, message string) {
@@ -27,11 +28,12 @@ func writeErr(w http.ResponseWriter, code int, message string) {
 func writeEnvelope(w http.ResponseWriter, code int, message string, data interface{}) {
 	env := Envelope{
 		Code:      code,
-		RequestID: uuid.NewString(),
+		RequestID: strings.ReplaceAll(uuid.NewString(), "-", ""),
 		Timestamp: time.Now().UnixMilli(),
 		Message:   message,
 		Data:      data,
 	}
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Ticket-Status", "1")
 	_ = json.NewEncoder(w).Encode(env)
 }

@@ -2,9 +2,27 @@ package sdk
 
 import (
 	"net/http"
+	"strconv"
 	"time"
 
 	"private-notes/game/db"
+)
+
+type idTokenClaims struct {
+	Sub         string `json:"sub"`
+	Iss         string `json:"iss"`
+	Aud         string `json:"aud"`
+	Iat         int64  `json:"iat"`
+	Exp         int64  `json:"exp"`
+	AccessToken string `json:"access_token"`
+}
+
+const (
+	idTokenIssuer   = "https://www.biligames.com"
+	idTokenAudience = "1000077"
+	idTokenLifetime = 2 * time.Hour
+	loginExpiry     = 30 * 24 * time.Hour
+	defaultFace     = "http://static.bilibili.co.jp/common/images/default.png"
 )
 
 type Server struct {
@@ -58,13 +76,13 @@ func (s *Server) OTPVerifyLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now()
-	idToken, err := s.Keys.SignJWT(map[string]interface{}{
-		"sub":          session.UName,
-		"iss":          "private-notes",
-		"aud":          "private-notes-client",
-		"iat":          now.Unix(),
-		"exp":          now.Add(72 * time.Hour).Unix(),
-		"access_token": session.AccessKey,
+	idToken, err := s.Keys.SignJWT(idTokenClaims{
+		Sub:         strconv.FormatInt(session.UID, 10),
+		Iss:         idTokenIssuer,
+		Aud:         idTokenAudience,
+		Iat:         now.Unix(),
+		Exp:         now.Add(idTokenLifetime).Unix(),
+		AccessToken: session.AccessKey,
 	})
 	if err != nil {
 		writeErr(w, -3, "failed to create token")
@@ -73,14 +91,14 @@ func (s *Server) OTPVerifyLogin(w http.ResponseWriter, r *http.Request) {
 
 	writeOK(w, map[string]interface{}{
 		"u_name":        session.UName,
-		"expires":       now.Add(72 * time.Hour).UnixMilli(),
+		"expires":       now.Add(loginExpiry).UnixMilli(),
 		"id_token":      idToken,
 		"hashed_email":  sha256Hex(email),
 		"mid":           session.MID,
 		"need_realname": false,
-		"s_face":        "",
+		"s_face":        defaultFace,
 		"uid":           session.UID,
-		"face":          "",
+		"face":          defaultFace,
 		"is_tourist":    false,
 		"hashed_tel":    "",
 		"is_new_user":   1,
@@ -105,8 +123,4 @@ func (s *Server) NotifyZone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeOK(w, nil)
-}
-
-func (s *Server) SyncAgreementStatus(w http.ResponseWriter, r *http.Request) {
-	writeEnvelope(w, 0, "success", nil)
 }

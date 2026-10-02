@@ -53,7 +53,7 @@ func keysFromPrivate(priv *rsa.PrivateKey) (*RSAKeys, error) {
 	return &RSAKeys{
 		Private: priv,
 		PEM:     string(pubPEM),
-		Hash:    fmt.Sprintf("%x", sum),
+		Hash:    fmt.Sprintf("%x", sum[:8]),
 	}, nil
 }
 
@@ -73,9 +73,8 @@ func b64url(b []byte) string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
-func (k *RSAKeys) SignJWT(claims map[string]interface{}) (string, error) {
-	header := map[string]string{"alg": "RS256", "typ": "JWT"}
-	headerJSON, _ := json.Marshal(header)
+func (k *RSAKeys) SignJWT(claims interface{}) (string, error) {
+	headerJSON := []byte(`{"alg":"RS256"}`)
 	claimsJSON, _ := json.Marshal(claims)
 	signingInput := b64url(headerJSON) + "." + b64url(claimsJSON)
 

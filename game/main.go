@@ -8,6 +8,7 @@ import (
 
 	"private-notes/game/config"
 	"private-notes/game/db"
+	"private-notes/game/logging"
 	"private-notes/game/sdk"
 )
 
@@ -64,32 +65,36 @@ func main() {
 
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("/gapi/client/activate", stubs.Activate)
+	mux.HandleFunc("/gapi/client/config", stubs.Config)
+	mux.HandleFunc("/gapi/client/country/list", stubs.CountryList)
 	mux.HandleFunc("/gapi/client/rsa_public", login.RSAPublic)
 	mux.HandleFunc("/gapi/client/mail/otp/send", login.OTPSend)
 	mux.HandleFunc("/gapi/client/mail/otp/verify/login", login.OTPVerifyLogin)
 	mux.HandleFunc("/gapi/client/create.role", login.CreateRole)
 	mux.HandleFunc("/gapi/client/notify.zone", login.NotifyZone)
+	mux.HandleFunc("/gapi/client/server/list", stubs.ServerList)
 
-	mux.HandleFunc("/gapi/client/sync_agreement_status", login.SyncAgreementStatus)
-	mux.HandleFunc("/gapi/client/configV2", stubs.Config)
-	mux.HandleFunc("/gapi/client/config", stubs.Config)
-
+	mux.HandleFunc("/gapi/client/configV2", stubs.GameSupportConfig)
+	mux.HandleFunc("/gapi/client/sync_agreement_status", stubs.SyncAgreementStatus)
 	mux.HandleFunc("/netcheck/config/safe", stubs.NetcheckSafe)
+	mux.HandleFunc("/app/time/conf", stubs.RealtimeConf)
 
-	mux.HandleFunc("/sdk/overseas/config", stubs.Config)
+	mux.HandleFunc("/sdk/overseas/config", stubs.OverseasConfig)
 	mux.HandleFunc("/sdk/overseas/notice/list", stubs.NoticeList)
 	mux.HandleFunc("/sdk/login/ui/abTest", stubs.ABTest)
 
-	mux.HandleFunc("/gapi/client/server/list", stubs.ServerList)
-
 	mux.HandleFunc("/sdk-hot-deploy/featureFlag/client/config", stubs.FeatureFlag)
-
 	mux.HandleFunc("/config/getConfig", stubs.CloudStorageConfig)
+
+	mux.HandleFunc("/", logging.Unmapped)
+
+	handler := logging.Middleware(mux)
 
 	log.Printf("private-notes listening on %s", cfg.ListenAddr)
 	if cfg.TLSCert != "" {
-		log.Fatal(http.ListenAndServeTLS(cfg.ListenAddr, cfg.TLSCert, cfg.TLSKey, mux))
+		log.Fatal(http.ListenAndServeTLS(cfg.ListenAddr, cfg.TLSCert, cfg.TLSKey, handler))
 	} else {
-		log.Fatal(http.ListenAndServe(cfg.ListenAddr, mux))
+		log.Fatal(http.ListenAndServe(cfg.ListenAddr, handler))
 	}
 }

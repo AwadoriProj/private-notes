@@ -82,7 +82,7 @@ func main() {
 			req.URL.Scheme = "https"
 			req.URL.Host = strings.TrimPrefix(cfg.UpstreamURL, "https://")
 			req.Host = req.URL.Host
-			req.Header.Set("X-Private-Dori-Original-Host", originalHost)
+			req.Header.Set("X-Private-Notes-Original-Host", originalHost)
 			return req, nil
 		})
 
