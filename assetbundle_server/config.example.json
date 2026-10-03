@@ -1,0 +1,15 @@
+{
+  "listen": "127.0.0.1:5081",
+  "mode": "cache",
+  "base_path": "/prod/en_3e8a72c5f1d9066b9a37c2e85f619db0",
+  "upstream": {
+    "root": "https://l14-prod-sg-patch-sirius.bilibiligame.net/prod/en_3e8a72c5f1d9066b9a37c2e85f619db0",
+    "authorization": "",
+    "unity_version": "6000.3.12f1"
+  },
+  "overlay_dir": "assetbundle_server/data/overlay",
+  "cache_dir": "assetbundle_server/data/cache",
+  "catalog_file": "assetbundle_server/data/overlay/asset/Android/catalog_1.0.0.300_en.bin",
+  "master_alias": {},
+  "auto_hash": true
+}

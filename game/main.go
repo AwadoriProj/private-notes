@@ -5,20 +5,26 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
+	"golang.org/x/net/http2"
+	"google.golang.org/grpc"
 	"private-notes/game/config"
 	"private-notes/game/db"
+	"private-notes/game/grpcapi"
 	"private-notes/game/logging"
 	"private-notes/game/sdk"
 )
 
 type serverConfig struct {
-	ListenAddr string               `json:"listen_addr"`
-	TLSCert    string               `json:"tls_cert"`
-	TLSKey     string               `json:"tls_key"`
-	RSAKeyPath string               `json:"rsa_key_path"`
-	DBDSN      string               `json:"db_dsn"`
-	Servers    []config.ServerEntry `json:"servers"`
+	ListenAddr      string               `json:"listen_addr"`
+	TLSCert         string               `json:"tls_cert"`
+	TLSKey          string               `json:"tls_key"`
+	RSAKeyPath      string               `json:"rsa_key_path"`
+	DBDSN           string               `json:"db_dsn"`
+	Servers         []config.ServerEntry `json:"servers"`
+	Version         string               `json:"version"`
+	ResourceVersion string               `json:"resource_version"`
 }
 
 func loadConfig(path string) (*serverConfig, error) {
@@ -34,7 +40,7 @@ func loadConfig(path string) (*serverConfig, error) {
 }
 
 func main() {
-	cfgPath := "config.json"
+	cfgPath := "game/config.json"
 	if len(os.Args) > 1 {
 		cfgPath = os.Args[1]
 	}
@@ -72,6 +78,7 @@ func main() {
 	mux.HandleFunc("/gapi/client/mail/otp/send", login.OTPSend)
 	mux.HandleFunc("/gapi/client/mail/otp/verify/login", login.OTPVerifyLogin)
 	mux.HandleFunc("/gapi/client/mail/otp/verify/register", login.OTPVerifyRegister)
+	mux.HandleFunc("/gapi/client/cache.login", login.CacheLogin)
 	mux.HandleFunc("/gapi/client/create.role", login.CreateRole)
 	mux.HandleFunc("/gapi/client/notify.zone", login.NotifyZone)
 	mux.HandleFunc("/gapi/client/server/list", stubs.ServerList)
@@ -80,6 +87,7 @@ func main() {
 	mux.HandleFunc("/gapi/client/sync_agreement_status", stubs.SyncAgreementStatus)
 	mux.HandleFunc("/netcheck/config/safe", stubs.NetcheckSafe)
 	mux.HandleFunc("/app/time/conf", stubs.RealtimeConf)
+	mux.HandleFunc("/app/global/time/heartbeat", stubs.RealtimeHeartbeat)
 
 	mux.HandleFunc("/sdk/overseas/config", stubs.OverseasConfig)
 	mux.HandleFunc("/sdk/overseas/notice/list", stubs.NoticeList)
@@ -91,11 +99,28 @@ func main() {
 	mux.HandleFunc("/", logging.Unmapped)
 
 	handler := logging.Middleware(mux)
+	grpcServer := grpc.NewServer()
+	grpcapi.New(grpcapi.Settings{
+		Servers:         cfg.Servers,
+		Version:         cfg.Version,
+		ResourceVersion: cfg.ResourceVersion,
+	}).Register(grpcServer)
+	combinedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+			grpcServer.ServeHTTP(w, r)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	})
 
 	log.Printf("private-notes listening on %s", cfg.ListenAddr)
 	if cfg.TLSCert != "" {
-		log.Fatal(http.ListenAndServeTLS(cfg.ListenAddr, cfg.TLSCert, cfg.TLSKey, handler))
+		server := &http.Server{Addr: cfg.ListenAddr, Handler: combinedHandler}
+		if err := http2.ConfigureServer(server, &http2.Server{}); err != nil {
+			log.Fatalf("http/2 setup failed: %v", err)
+		}
+		log.Fatal(server.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey))
 	} else {
-		log.Fatal(http.ListenAndServe(cfg.ListenAddr, handler))
+		log.Fatal(http.ListenAndServe(cfg.ListenAddr, combinedHandler))
 	}
 }

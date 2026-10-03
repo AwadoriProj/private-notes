@@ -62,19 +62,39 @@ func (s *Server) OTPVerifyLogin(w http.ResponseWriter, r *http.Request) {
 	_ = r.ParseForm()
 	ticket := r.Form.Get("email_ticket")
 	code := r.Form.Get("email_code")
-	email := r.Form.Get("email")
-
-	if !s.Store.VerifyOTP(ticket, code) {
-		writeErr(w, -2, "invalid otp code")
-		return
-	}
-
-	session, err := s.Store.CreateSession(r.Context(), email)
+	session, ok, err := s.Store.VerifyOTP(r.Context(), ticket, code)
 	if err != nil {
 		writeErr(w, -5, "failed to create session")
 		return
 	}
+	if !ok {
+		writeErr(w, -2, "invalid otp code")
+		return
+	}
+	s.writeLogin(w, session)
+}
+func (s *Server) CacheLogin(w http.ResponseWriter, r *http.Request) {
+	_ = r.ParseForm()
+	accessKey := r.Form.Get("access_key")
+	uid := r.Form.Get("uid")
 
+	session, ok, err := s.Store.LookupByAccessKey(r.Context(), accessKey)
+	if err != nil {
+		writeErr(w, -6, "session lookup failed")
+		return
+	}
+	if !ok || (uid != "" && uid != strconv.FormatInt(session.UID, 10)) {
+		writeErr(w, -4, "unknown access_key")
+		return
+	}
+	if err := s.Store.TouchSession(r.Context(), accessKey); err != nil {
+		writeErr(w, -6, "session refresh failed")
+		return
+	}
+	session.IsNew = false
+	s.writeLogin(w, session)
+}
+func (s *Server) writeLogin(w http.ResponseWriter, session sessionEntry) {
 	now := time.Now()
 	idToken, err := s.Keys.SignJWT(idTokenClaims{
 		Sub:         strconv.FormatInt(session.UID, 10),
@@ -89,11 +109,15 @@ func (s *Server) OTPVerifyLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	isNew := 0
+	if session.IsNew {
+		isNew = 1
+	}
 	writeOK(w, map[string]interface{}{
 		"u_name":        session.UName,
 		"expires":       now.Add(loginExpiry).UnixMilli(),
 		"id_token":      idToken,
-		"hashed_email":  sha256Hex(email),
+		"hashed_email":  sha256Hex(session.Email),
 		"mid":           session.MID,
 		"need_realname": false,
 		"s_face":        defaultFace,
@@ -101,7 +125,7 @@ func (s *Server) OTPVerifyLogin(w http.ResponseWriter, r *http.Request) {
 		"face":          defaultFace,
 		"is_tourist":    false,
 		"hashed_tel":    "",
-		"is_new_user":   1,
+		"is_new_user":   isNew,
 		"access_key":    session.AccessKey,
 	})
 }

@@ -1,8 +1,14 @@
 /mitm/ca/
-/mitm/config.json
-/game/config.json
 /game/login_rsa.pem
 /game/server.crt
 /game/server.key
 /game/db.json
+/game/proto/
+/game/proto.update.tmp/
+/game/proto.update.old/
 *.log
+*/config.json
+config.json
+/capture/latest/
+*/__pycache__/
+/__pycache__/

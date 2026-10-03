@@ -14,6 +14,7 @@ type otpEntry struct {
 	Email     string
 	Code      string
 	ExpiresAt time.Time
+	Session   *sessionEntry
 }
 
 type sessionEntry struct {
@@ -22,12 +23,19 @@ type sessionEntry struct {
 	UName     string
 	Email     string
 	AccessKey string
+	IsNew     bool
+}
+
+type memAccount struct {
+	UID   int64
+	UName string
 }
 
 type Store struct {
 	mu         sync.Mutex
 	otps       map[string]otpEntry
 	sessions   map[string]sessionEntry
+	accounts   map[string]memAccount
 	nextUID    int64
 	DB         *db.Store
 	sessionTTL time.Duration
@@ -37,6 +45,7 @@ func NewStore(database *db.Store) *Store {
 	return &Store{
 		otps:       make(map[string]otpEntry),
 		sessions:   make(map[string]sessionEntry),
+		accounts:   make(map[string]memAccount),
 		nextUID:    100000,
 		DB:         database,
 		sessionTTL: 30 * 24 * time.Hour,
@@ -58,19 +67,43 @@ func (s *Store) CreateOTP(email string) (ticket string, ttl int) {
 	s.otps[ticket] = otpEntry{Email: email, Code: fixedOTP, ExpiresAt: time.Now().Add(5 * time.Minute)}
 	return ticket, 270
 }
-
-func (s *Store) VerifyOTP(ticket, code string) bool {
+func (s *Store) VerifyOTP(ctx context.Context, ticket, code string) (sessionEntry, bool, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	entry, ok := s.otps[ticket]
-	if !ok || time.Now().After(entry.ExpiresAt) {
-		return false
+	entry, found := s.otps[ticket]
+	if !found || time.Now().After(entry.ExpiresAt) {
+		s.mu.Unlock()
+		return sessionEntry{}, false, nil
 	}
 	if code != fixedOTP && code != entry.Code {
-		return false
+		s.mu.Unlock()
+		return sessionEntry{}, false, nil
 	}
-	delete(s.otps, ticket)
-	return true
+	if entry.Session != nil {
+		session := *entry.Session
+		s.mu.Unlock()
+		return session, true, nil
+	}
+	email := entry.Email
+	s.mu.Unlock()
+
+	session, err := s.CreateSession(ctx, email)
+	if err != nil {
+		return sessionEntry{}, false, err
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, found = s.otps[ticket]
+	if !found || time.Now().After(entry.ExpiresAt) {
+		return sessionEntry{}, false, nil
+	}
+	if entry.Session == nil {
+		entry.Session = &session
+		s.otps[ticket] = entry
+	} else {
+		session = *entry.Session
+	}
+	return session, true, nil
 }
 
 func (s *Store) CreateSession(ctx context.Context, email string) (sessionEntry, error) {
@@ -83,13 +116,19 @@ func (s *Store) CreateSession(ctx context.Context, email string) (sessionEntry, 
 func (s *Store) createSessionMemory(email string) sessionEntry {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.nextUID++
+	acc, exists := s.accounts[email]
+	if !exists {
+		s.nextUID++
+		acc = memAccount{UID: s.nextUID, UName: "user_" + randomHex(6)}
+		s.accounts[email] = acc
+	}
 	entry := sessionEntry{
-		UID:       s.nextUID,
-		MID:       s.nextUID,
-		UName:     "user_" + randomHex(6),
+		UID:       acc.UID,
+		MID:       acc.UID,
+		UName:     acc.UName,
 		Email:     email,
 		AccessKey: randomHex(24),
+		IsNew:     !exists,
 	}
 	s.sessions[entry.AccessKey] = entry
 	return entry
@@ -110,7 +149,14 @@ func (s *Store) createSessionDB(ctx context.Context, email string) (sessionEntry
 		UName:     acc.UName,
 		Email:     acc.Email,
 		AccessKey: accessKey,
+		IsNew:     acc.IsNew,
 	}, nil
+}
+func (s *Store) TouchSession(ctx context.Context, accessKey string) error {
+	if s.DB == nil {
+		return nil
+	}
+	return s.DB.TouchSession(ctx, accessKey, time.Now().Add(s.sessionTTL))
 }
 
 func (s *Store) LookupByAccessKey(ctx context.Context, key string) (sessionEntry, bool, error) {

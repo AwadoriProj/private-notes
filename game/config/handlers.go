@@ -15,8 +15,14 @@ type Handlers struct {
 }
 
 type ServerEntry struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
+	ID             int    `json:"id"`
+	Name           string `json:"name"`
+	CDNRoot        string `json:"cdn_root"`
+	APIServerRoot  string `json:"api_server_root"`
+	ChatServerRoot string `json:"chat_server_root"`
+	ATServerRoot   string `json:"at_server_root"`
+	LiveServer     string `json:"live_server"`
+	AreaID         string `json:"area_id"`
 }
 
 func New(servers []ServerEntry) *Handlers {
@@ -47,7 +53,7 @@ func loginStyle(w http.ResponseWriter, data interface{}) {
 		"code":       0,
 		"request_id": requestID(),
 		"timestamp":  time.Now().UnixMilli(),
-		"message":    "success",
+		"message":    "Permintaan terkirim",
 	}
 	if data != nil {
 		body["data"] = data
@@ -59,7 +65,7 @@ func sdkStyle(w http.ResponseWriter, data interface{}) {
 	body := map[string]interface{}{
 		"request_id": requestID(),
 		"code":       0,
-		"message":    "success",
+		"message":    "Permintaan Berhasil",
 	}
 	if data != nil {
 		body["data"] = data
@@ -73,6 +79,7 @@ func supportStyle(w http.ResponseWriter, data interface{}, extra map[string]inte
 		"message":    "success",
 		"request_id": requestID(),
 		"ts":         time.Now().UnixMilli(),
+		"success":    true,
 	}
 	if data != nil {
 		body["data"] = data
@@ -150,6 +157,11 @@ func (h *Handlers) RealtimeConf(w http.ResponseWriter, r *http.Request) {
 	conf["timestamp"] = strconv.FormatInt(time.Now().UnixMilli(), 10)
 	conf["clientRequestId"] = r.Form.Get("client_request_uuid")
 	writeJSON(w, false, conf)
+}
+
+func (h *Handlers) RealtimeHeartbeat(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]string{"code": "0"})
 }
 
 func (h *Handlers) FeatureFlag(w http.ResponseWriter, r *http.Request) {

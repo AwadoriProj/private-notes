@@ -1,0 +1,13 @@
+{
+  "server_name": "private-notes",
+  "game_server_port": 9443,
+  "mitm_port": 8443,
+  "version": "",
+  "resource_version": "",
+  "cdn_root": "",
+  "api_server_root": "",
+  "chat_server_root": "",
+  "at_server_root": "",
+  "live_server": "",
+  "area_id": ""
+}

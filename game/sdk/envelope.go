@@ -18,7 +18,7 @@ type Envelope struct {
 }
 
 func writeOK(w http.ResponseWriter, data interface{}) {
-	writeEnvelope(w, 0, "success", data)
+	writeEnvelope(w, 0, "Permintaan terkirim", data)
 }
 
 func writeErr(w http.ResponseWriter, code int, message string) {

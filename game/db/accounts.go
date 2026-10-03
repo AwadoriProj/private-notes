@@ -64,3 +64,10 @@ func (s *Store) LookupSession(ctx context.Context, accessKey string) (SessionLoo
 	}
 	return out, true, nil
 }
+
+func (s *Store) TouchSession(ctx context.Context, accessKey string, expiresAt time.Time) error {
+	_, err := s.conn.ExecContext(ctx,
+		`UPDATE sessions SET expires_at = $2 WHERE access_key = $1`,
+		accessKey, expiresAt)
+	return err
+}
