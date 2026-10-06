@@ -12,3 +12,4 @@ config.json
 /capture/latest/
 */__pycache__/
 /__pycache__/
+/assetbundle_server/data/cache/*
