@@ -19,6 +19,9 @@ TARGET_HOSTS = [
 ]
 
 
+DEFAULT_SERVER_NAME = "Private Notes"
+
+
 def load_base_config():
     path = ROOT / "base.config.json"
     cfg = json.loads(path.read_text(encoding="utf-8"))
@@ -26,7 +29,22 @@ def load_base_config():
         value = cfg.get(key)
         if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 65535:
             raise ValueError(f"{key} in {path} must be an integer from 1 to 65535")
-    name = cfg.get("server_name")
+    wireguard = cfg.get("wireguard", False)
+    if not isinstance(wireguard, bool):
+        raise ValueError(f"wireguard in {path} must be true or false")
+    wireguard_port = cfg.get("wireguard_port", 51820)
+    if isinstance(wireguard_port, bool) or not isinstance(wireguard_port, int) or not 1 <= wireguard_port <= 65535:
+        raise ValueError(f"wireguard_port in {path} must be an integer from 1 to 65535")
+    server_id = cfg.get("server_id", 1)
+    if isinstance(server_id, bool) or not isinstance(server_id, int) or server_id < 1:
+        raise ValueError(f"server_id in {path} must be a positive integer")
+    for key in ("display_name", "players_path", "cp_server_name"):
+        if not isinstance(cfg.get(key, ""), str):
+            raise ValueError(f"{key} in {path} must be a string")
+    ng_words = cfg.get("ng_words", [])
+    if not isinstance(ng_words, list) or not all(isinstance(word, str) for word in ng_words):
+        raise ValueError(f"ng_words in {path} must be a list of strings")
+    name = cfg.get("server_name", DEFAULT_SERVER_NAME)
     if not isinstance(name, str) or not name.strip():
         raise ValueError(f"server_name in {path} must be a non-empty string")
     return cfg
@@ -107,7 +125,7 @@ def generate_game_tls_cert():
     return cert_path, key_path
 
 
-def write_mitm_config(ca_cert_path, ca_key_path, listen_addr, upstream_url):
+def write_mitm_config(ca_cert_path, ca_key_path, listen_addr, upstream_url, wireguard=False, wireguard_port=51820):
     cfg = {
         "listen_addr": listen_addr,
         "ca_cert_path": str(ca_cert_path),
@@ -117,6 +135,8 @@ def write_mitm_config(ca_cert_path, ca_key_path, listen_addr, upstream_url):
         "routes": {
             "l14-prod-sg-patch-sirius.bilibiligame.net": "http://127.0.0.1:5081",
         },
+        "wireguard": wireguard,
+        "wireguard_port": wireguard_port,
     }
     out = ROOT / "mitm" / "config.json"
     out.write_text(json.dumps(cfg, indent=2))
@@ -132,10 +152,14 @@ def write_game_config(listen_addr, tls_cert_path, tls_key_path, server_name):
         "rsa_key_path": str(GAME_DIR / "login_rsa.pem"),
         "version": base_cfg.get("version", ""),
         "resource_version": base_cfg.get("resource_version", ""),
+        "players_path": base_cfg.get("players_path", ""),
+        "ng_words": base_cfg.get("ng_words", []),
+        "cp_server_name": base_cfg.get("cp_server_name", "global server"),
         "servers": [
             {
-                "id": 1,
+                "id": base_cfg.get("server_id", 1),
                 "name": server_name,
+                "display_name": base_cfg.get("display_name", "").strip() or server_name,
                 "cdn_root": base_cfg.get("cdn_root", ""),
                 "api_server_root": base_cfg.get("api_server_root", ""),
                 "chat_server_root": base_cfg.get("chat_server_root", ""),
@@ -145,6 +169,14 @@ def write_game_config(listen_addr, tls_cert_path, tls_key_path, server_name):
             },
         ],
     }
+    db_json = GAME_DIR / "db.json"
+    if db_json.exists():
+        dsn = json.loads(db_json.read_text()).get("dsn", "")
+        if dsn:
+            cfg["db_dsn"] = dsn
+            print(f"merged dsn from {db_json} as db_dsn")
+    else:
+        print("no game/db.json found, sessions will stay in memory; run scripts/setup_db.py then re-run this script")
     out = GAME_DIR / "config.json"
     out.write_text(json.dumps(cfg, indent=2))
     print(f"wrote {out}")
@@ -154,7 +186,7 @@ def main():
     base_cfg = load_base_config()
     game_port = base_cfg["game_server_port"]
     mitm_port = base_cfg["mitm_port"]
-    server_name = base_cfg["server_name"].strip()
+    server_name = base_cfg.get("server_name", DEFAULT_SERVER_NAME).strip()
 
     ca_cert_path, ca_key_path = generate_ca()
     game_cert_path, game_key_path = generate_game_tls_cert()
@@ -163,6 +195,8 @@ def main():
         ca_key_path,
         listen_addr=f":{mitm_port}",
         upstream_url=f"https://127.0.0.1:{game_port}",
+        wireguard=base_cfg.get("wireguard", False),
+        wireguard_port=base_cfg.get("wireguard_port", 51820),
     )
     write_game_config(
         listen_addr=f":{game_port}",
@@ -170,12 +204,21 @@ def main():
         tls_key_path=game_key_path,
         server_name=server_name,
     )
+    if base_cfg.get("wireguard", False):
+        route = (
+            f"  2. Run step 4, copy the WireGuard client config that mitmweb prints, set Endpoint to this machine's LAN IP, port {base_cfg.get('wireguard_port', 51820)}/udp, and import it into the WireGuard app on the device.\n"
+            "     The game's gRPC traffic only reaches the private server through WireGuard.\n"
+        )
+        mitm_cmd = "go run ./mitm ./mitm/config.json"
+    else:
+        route = f"  2. Set the device's HTTP(S) proxy to this machine's IP, port {mitm_port}.\n"
+        mitm_cmd = "go run ./mitm ./mitm/config.json"
     print(
         "\nNext you'll just:\n"
         "  1. Install mitm/ca/ca.crt on the client device, or else.\n"
-        f"  2. Set the device's HTTP(S) proxy to this machine's IP, port {mitm_port}.\n"
-        "  3. run this : 'go run ./game ./game/config.json'\n"
-        "  4. run this : 'go run ./mitm ./mitm/config.json'\n"
+        + route
+        + "  3. run this : 'go run ./game ./game/config.json'\n"
+        + f"  4. run this : '{mitm_cmd}'\n"
     )
 
 

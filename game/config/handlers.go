@@ -15,14 +15,16 @@ type Handlers struct {
 }
 
 type ServerEntry struct {
-	ID             int    `json:"id"`
-	Name           string `json:"name"`
-	CDNRoot        string `json:"cdn_root"`
-	APIServerRoot  string `json:"api_server_root"`
-	ChatServerRoot string `json:"chat_server_root"`
-	ATServerRoot   string `json:"at_server_root"`
-	LiveServer     string `json:"live_server"`
-	AreaID         string `json:"area_id"`
+	ID                int    `json:"id"`
+	Name              string `json:"name"`
+	CDNRoot           string `json:"cdn_root"`
+	APIServerRoot     string `json:"api_server_root"`
+	ChatServerRoot    string `json:"chat_server_root"`
+	ATServerRoot      string `json:"at_server_root"`
+	LiveServer        string `json:"live_server"`
+	AreaID            string `json:"area_id"`
+	DisplayName       string `json:"display_name,omitempty"`
+	AgeIconSpriteName string `json:"age_icon_sprite_name,omitempty"`
 }
 
 func New(servers []ServerEntry) *Handlers {
@@ -53,7 +55,7 @@ func loginStyle(w http.ResponseWriter, data interface{}) {
 		"code":       0,
 		"request_id": requestID(),
 		"timestamp":  time.Now().UnixMilli(),
-		"message":    "Permintaan terkirim",
+		"message":    "Request Sent",
 	}
 	if data != nil {
 		body["data"] = data
@@ -65,7 +67,7 @@ func sdkStyle(w http.ResponseWriter, data interface{}) {
 	body := map[string]interface{}{
 		"request_id": requestID(),
 		"code":       0,
-		"message":    "Permintaan Berhasil",
+		"message":    "Request Succeed",
 	}
 	if data != nil {
 		body["data"] = data

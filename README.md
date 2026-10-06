@@ -1,71 +1,96 @@
-# Our Notes Private Server
-> if you got access to this source code, please don't leak it yet.
+# O## N#### Private Server
+A private server made for a certain rhythm game.
+
+## Requirements
+
+- Go 1.22 or later
+- Python 3
+- PostgreSQL 
+- A client device
+
 ## Setup
+> The command used here is for windows powershell
 
-> Make sure you have Golang installed.
+### Basic setup
+Edit [`base.config.json`](./base.config.json). Set at least:
 
-Set `server_name`, `game_server_port`, and `mitm_port` in [base.config.json](./base.config.json), then run setup to generate `game/config.json` and `mitm/config.json` from those values. The optional `version`, `resource_version`, and server root fields supply the dumped gRPC services with their current endpoint and version values. Rerun setup after changing the base config.
+- `server_name`
+- `game_server_port`
+- `mitm_port`
+
+You'll need to capture the actual game server to field out `version`, `resource_version`, and `cdn_root`.
+
+Update protobuf:
+```powershell
+python scripts/update_protos.py
+```
 
 Create db:
-```bash
+```powershell
 python scripts/setup_db.py
 ```
 
-Generate CA + game TLS cert + both config.json files:
-```bash
+Setup config:
+```powershell
 python scripts/setup.py
 ```
 
-Capture:
+### Extra: setup assetbundle server
+
+Copy `assetbundle_server/config.example.json` name it `assetbundle_server/config.json`
+
+Start capturing server reference:
 ```powershell
-py -m pip install mitmproxy
-./capture/run_capture.ps1
+./capture/run_capture.ps1 --wireguard
 ```
-All captured requests and responses are also saved in one mitmproxy flow file at `capture/latest/raw`.
 
-Generate captured.go:
+Set env:
 ```powershell
-py capture/generate_captured.py
+$env:ASSETBUNDLE_UPSTREAM_AUTHORIZATION = (Get-Content -Raw capture/latest/upstream_authorization.txt).Trim()
 ```
 
-Update generated game protobuf bindings from the separate app-protos repository:
+Keep the value a secret, ok? 
+
+Test probe catalog:
 ```powershell
-py scripts/update_protos.py
+go run ./assetbundle_server -config assetbundle_server/config.json -probe <relative-path>
 ```
 
-## Usage
+`200` = served
+`401` / `403` = unauthorized
+`404` = not found
 
-Run game server (TLS; port comes from `base.config.json`):
-```bash
-go run ./game game/config.json
-```
-Run assetbundle server (:5081):
-```bash
+### Running the server:
+
+
+asset-bundle server:
+```powershell
 go run ./assetbundle_server -config assetbundle_server/config.json
 ```
-Set `ASSETBUNDLE_UPSTREAM_AUTHORIZATION` in that terminal before starting it. Use the `Authorization` header from a successful original asset request in mitmweb; keep the value private. The asset CDN route in `mitm/config.json` forwards to this server on `127.0.0.1:5081`.
 
-Run MITM proxy (port comes from `base.config.json`):
-```bash
-go run ./mitm mitm/config.json
-```
-or
-Run MITM proxy with mitmweb:
-```bash
-go run ./mitm mitm/config.json --web
+game server:
+```powershell
+go run ./game ./game/config.json
 ```
 
-> make sure the client device uses this machine's IP and the `mitm_port` from `base.config.json` as its HTTP(S) proxy, and that certificate pinning is disabled in the client.
+mitm:
+```powershell
+go run ./mitm --config ./mitm/config.json
+```
+> add --web flag if ya prefer using mitmweb. make sure you've atleast run it with --wireguard flag once. just once.
 
-## Progress
-- [X] Login SDK
-- [ ] Game gRPC and masterdata bootstrap
-- [ ] Masterdata and on demand assets
-- [ ] etc
+#### WireGuard 
 
-## Note
-OTP is 000000
-### Requirements (for host)
-- PostgreSQL
-- Golang
-- Python
+Mitm redirect require wireguard for gRPC. make sure its installed on client device. make a tunnel and connect to mitm + wireguard
+
+### Connect to client
+Connect client to mitm using wireguard. theres a lot of tutorials for that if you dont know how/
+
+## Current progress
+
+- [x] Login SDK
+- [x] (almost) Game gRPC and master-data bootstrap
+- [x] Master data and on-demand assets
+- [ ] Gameplay
+
+The fixed OTP is `000000`.

@@ -1,13 +1,22 @@
 {
-  "server_name": "private-notes",
+  "server_name": "Private Notes",
   "game_server_port": 9443,
   "mitm_port": 8443,
-  "version": "",
-  "resource_version": "",
-  "cdn_root": "",
-  "api_server_root": "",
-  "chat_server_root": "",
-  "at_server_root": "",
-  "live_server": "",
-  "area_id": ""
+  "wireguard": true,
+  "wireguard_port": 51820,
+  "server_id": 16841,
+  "display_name": "Private Notes",
+  "players_path": "game/players.json",
+  "ng_words": [
+    "rock"
+  ],
+  "cp_server_name": "private notes",
+  "version": "11bbb30383ff4acda2173610b3c4c67e",
+  "resource_version": "1.0.0.300",
+  "cdn_root": "https://l14-prod-sg-patch-sirius.bilibiligame.net/prod/en_3e8a72c5f1d9066b9a37c2e85f619db0",
+  "api_server_root": "https://l14-prod-va-all-gs-sirius.bilibiligame.net",
+  "chat_server_root": "wss://l14-prod-va-all-gs-sirius.bilibiligame.net/ws",
+  "at_server_root": "https://l14-prod-va-anontokyo-gs-sirius.bilibiligame.net",
+  "live_server": "l14-prod-oversea-photon-sirius.bilibiligame.net:9002",
+  "area_id": "3"
 }

@@ -25,6 +25,8 @@ type serverConfig struct {
 	Servers         []config.ServerEntry `json:"servers"`
 	Version         string               `json:"version"`
 	ResourceVersion string               `json:"resource_version"`
+	PlayersPath     string               `json:"players_path"`
+	NGWords         []string             `json:"ng_words"`
 }
 
 func loadConfig(path string) (*serverConfig, error) {
@@ -99,12 +101,19 @@ func main() {
 	mux.HandleFunc("/", logging.Unmapped)
 
 	handler := logging.Middleware(mux)
-	grpcServer := grpc.NewServer()
-	grpcapi.New(grpcapi.Settings{
-		Servers:         cfg.Servers,
-		Version:         cfg.Version,
-		ResourceVersion: cfg.ResourceVersion,
-	}).Register(grpcServer)
+	api, err := grpcapi.New(grpcapi.Settings{
+		Servers:           cfg.Servers,
+		Version:           cfg.Version,
+		ResourceVersion:   cfg.ResourceVersion,
+		PlayersPath:       cfg.PlayersPath,
+		NGWords:           cfg.NGWords,
+		VerifyAccessToken: login.Store.ValidateAccessKey,
+	})
+	if err != nil {
+		log.Fatalf("grpc api setup failed: %v", err)
+	}
+	grpcServer := grpc.NewServer(api.ServerOptions()...)
+	api.Register(grpcServer)
 	combinedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			grpcServer.ServeHTTP(w, r)

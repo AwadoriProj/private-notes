@@ -8,6 +8,9 @@ from pathlib import Path
 
 from mitmproxy import http
 
+AUTH_METADATA = "private_notes_authorization"
+ASSET_MARKERS = ("/asset/", "/master/")
+
 ROOT = Path(__file__).resolve().parents[1]
 OUT = Path(os.environ.get("CAPTURE_OUTPUT", ROOT / "capture" / "latest"))
 
@@ -23,41 +26,63 @@ TARGETS = [
 ]
 
 
-def capture_name(path: str, data: object) -> str | None:
+saved_authorization: str | None = None
+
+
+def target_name(path: str) -> str | None:
     for pattern, name in TARGETS:
         if pattern.fullmatch(path):
-            if name == "gapi-config":
-                raw = json.dumps(data, ensure_ascii=False).lower()
-                return "agreement-config" if "agreement_config_list" in raw else "login-config"
             return name
     return None
 
 
-def request(flow: http.HTTPFlow) -> None:
+def capture_name(path: str, data: object) -> str | None:
+    name = target_name(path)
+    if name == "gapi-config":
+        raw = json.dumps(data, ensure_ascii=False).lower()
+        return "agreement-config" if "agreement_config_list" in raw else "login-config"
+    return name
+
+
+def is_asset_request(flow: http.HTTPFlow) -> bool:
     path = flow.request.path.split("?", 1)[0].lower()
-    if flow.request.method in {"GET", "HEAD"} and ("/asset/" in path or "/master/" in path):
-        authorization = flow.request.headers.get("authorization")
-        if authorization:
-            flow.metadata["private_notes_authorization"] = authorization
+    return flow.request.method in {"GET", "HEAD"} and any(marker in path for marker in ASSET_MARKERS)
+
+
+def save_authorization(authorization: str) -> bool:
+    global saved_authorization
+    if authorization == saved_authorization:
+        return False
+    OUT.mkdir(parents=True, exist_ok=True)
+    tmp = OUT / "upstream_authorization.txt.tmp"
+    tmp.write_text(authorization + "\n", encoding="utf-8")
+    tmp.replace(OUT / "upstream_authorization.txt")
+    saved_authorization = authorization
+    return True
+
+
+def request(flow: http.HTTPFlow) -> None:
+    if not is_asset_request(flow):
+        return
+    authorization = flow.request.headers.get("authorization")
+    if authorization:
+        flow.metadata[AUTH_METADATA] = authorization
 
 
 def response(flow: http.HTTPFlow) -> None:
-    path = flow.request.path.split("?", 1)[0].lower()
     if not flow.response:
         return
 
-    authorization = flow.metadata.get("private_notes_authorization")
-    if authorization and 200 <= flow.response.status_code < 300:
-        OUT.mkdir(parents=True, exist_ok=True)
-        auth_path = OUT / "upstream_authorization.txt"
-        tmp_auth_path = OUT / "upstream_authorization.txt.tmp"
-        tmp_auth_path.write_text(authorization + "\n", encoding="utf-8")
-        tmp_auth_path.replace(auth_path)
-        print("captured Authorization header from successful asset/master request")
+    authorization = flow.metadata.get(AUTH_METADATA)
+    if authorization and 200 <= flow.response.status_code < 300 and save_authorization(authorization):
+        print(f"captured Authorization header from successful asset/master request, saved to {OUT / 'upstream_authorization.txt'}")
+
+    path = flow.request.path.split("?", 1)[0].lower()
+    if target_name(path) is None:
+        return
 
     try:
-        body = flow.response.get_text(strict=False)
-        data = json.loads(body)
+        data = json.loads(flow.response.get_text(strict=False))
     except (ValueError, UnicodeError):
         print(f"skip non-JSON response: {flow.request.pretty_url}", file=sys.stderr)
         return

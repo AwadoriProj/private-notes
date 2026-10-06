@@ -37,7 +37,7 @@ def upstream_for(config, host):
 
 
 def request(flow: http.HTTPFlow):
-    original_host = flow.request.host
+    original_host = flow.request.pretty_host
     upstream = upstream_for(CONFIG, original_host)
     if not upstream or not upstream.hostname:
         return

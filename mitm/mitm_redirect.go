@@ -11,19 +11,24 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/elazarl/goproxy"
 )
 
 type mitmConfig struct {
-	ListenAddr  string            `json:"listen_addr"`
-	CACertPath  string            `json:"ca_cert_path"`
-	CAKeyPath   string            `json:"ca_key_path"`
-	UpstreamURL string            `json:"upstream_url"`
-	Hosts       []string          `json:"hosts"`
-	Routes      map[string]string `json:"routes"`
+	ListenAddr    string            `json:"listen_addr"`
+	CACertPath    string            `json:"ca_cert_path"`
+	CAKeyPath     string            `json:"ca_key_path"`
+	UpstreamURL   string            `json:"upstream_url"`
+	Hosts         []string          `json:"hosts"`
+	Routes        map[string]string `json:"routes"`
+	WireGuard     bool              `json:"wireguard"`
+	WireGuardPort int               `json:"wireguard_port"`
 }
+
+const defaultWireGuardPort = 51820
 
 func loadConfig(path string) (*mitmConfig, error) {
 	data, err := os.ReadFile(path)
@@ -33,6 +38,12 @@ func loadConfig(path string) (*mitmConfig, error) {
 	var cfg mitmConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
+	}
+	if cfg.WireGuardPort == 0 {
+		cfg.WireGuardPort = defaultWireGuardPort
+	}
+	if cfg.WireGuardPort < 1 || cfg.WireGuardPort > 65535 {
+		return nil, fmt.Errorf("wireguard_port must be between 1 and 65535, got %d", cfg.WireGuardPort)
 	}
 	return &cfg, nil
 }
@@ -80,12 +91,15 @@ func (c *mitmConfig) upstreamFor(host string) (*url.URL, bool) {
 
 func main() {
 	webMode := false
+	wireGuardFlag := false
 	cfgPath := ""
 	for i := 1; i < len(os.Args); i++ {
 		arg := os.Args[i]
 		switch {
 		case arg == "--web":
 			webMode = true
+		case arg == "--wireguard":
+			wireGuardFlag = true
 		case arg == "--config" && i+1 < len(os.Args):
 			i++
 			cfgPath = os.Args[i]
@@ -105,6 +119,13 @@ func main() {
 	cfg, err := loadConfig(cfgPath)
 	if err != nil {
 		log.Fatalf("failed to load %s: %v", cfgPath, err)
+	}
+	if wireGuardFlag {
+		cfg.WireGuard = true
+	}
+	if cfg.WireGuard && !webMode {
+		log.Printf("wireguard requires mitmproxy (HTTP/2 and gRPC cannot pass through goproxy), switching to mitmweb")
+		webMode = true
 	}
 	if webMode {
 		if err := runMitmweb(cfgPath, cfg); err != nil {
@@ -178,22 +199,43 @@ func runMitmweb(cfgPath string, cfg *mitmConfig) error {
 		return fmt.Errorf("write mitmweb CA: %w", err)
 	}
 
-	listenHost, listenPort := splitListenAddr(cfg.ListenAddr)
-	args := []string{
-		"--listen-host", listenHost,
-		"--listen-port", listenPort,
-		"--set", "confdir=" + confDir,
-		"--set", "ssl_insecure=true",
-		"--web-open-browser",
-		"-s", filepath.Join(filepath.Dir(configPath), "redirect_web.py"),
-	}
+	args := mitmwebArgs(cfg, confDir, filepath.Join(filepath.Dir(configPath), "redirect_web.py"))
 	cmd := exec.Command("mitmweb", args...)
 	cmd.Env = append(os.Environ(), "PRIVATE_NOTES_MITM_CONFIG="+configPath)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	if cfg.WireGuard {
+		log.Printf("starting mitmweb with WireGuard on UDP %d and regular proxy on %s; import the WireGuard client config printed by mitmweb into the WireGuard app, keys are stored in %s", cfg.WireGuardPort, cfg.ListenAddr, filepath.Join(confDir, "wireguard.conf"))
+	}
 	log.Printf("starting mitmweb for redirect proxy on %s; web UI defaults to http://127.0.0.1:8081", cfg.ListenAddr)
 	return cmd.Run()
+}
+
+func mitmwebArgs(cfg *mitmConfig, confDir, scriptPath string) []string {
+	listenHost, listenPort := splitListenAddr(cfg.ListenAddr)
+	var args []string
+	if listenHost != "0.0.0.0" {
+		args = append(args, "--listen-host", listenHost)
+	}
+	if cfg.WireGuard {
+		regular := "regular"
+		if listenPort != "" {
+			regular += "@" + listenPort
+		}
+		args = append(args,
+			"--mode", regular,
+			"--mode", "wireguard@"+strconv.Itoa(cfg.WireGuardPort),
+		)
+	} else {
+		args = append(args, "--listen-port", listenPort)
+	}
+	return append(args,
+		"--set", "confdir="+confDir,
+		"--set", "ssl_insecure=true",
+		"--web-open-browser",
+		"-s", scriptPath,
+	)
 }
 
 func splitListenAddr(addr string) (string, string) {
